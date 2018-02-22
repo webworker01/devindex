@@ -9,3 +9,7 @@ Dynamically display subfolders and files plus links to handpicked tools with (ne
 
 Then in adminer: 
 > git submodule update --init
+
+## Q&A
+1. Why are there 3 tools for OPCache?
+> They each have their uses, but I do use ocp.php (OPCache Stats 3) the most.
