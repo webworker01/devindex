@@ -1,12 +1,14 @@
 <?php
 
+namespace OpcacheGui;
+
 /**
  * OPcache GUI
  *
  * A simple but effective single-file GUI for the OPcache PHP extension.
  *
  * @author Andrew Collington, andy@amnuts.com
- * @version 2.2.3
+ * @version 2.4.0
  * @link https://github.com/amnuts/opcache-gui
  * @license MIT, http://acollington.mit-license.org/
  */
@@ -17,15 +19,17 @@
  */
 
 $options = [
-    'allow_filelist'   => true,  // show/hide the files tab
-    'allow_invalidate' => true,  // give a link to invalidate files
-    'allow_reset'      => true,  // give option to reset the whole cache
-    'allow_realtime'   => true,  // give option to enable/disable real-time updates
-    'refresh_time'     => 5,     // how often the data will refresh, in seconds
-    'size_precision'   => 2,     // Digits after decimal point
-    'size_space'       => false, // have '1MB' or '1 MB' when showing sizes
-    'charts'           => true,  // show gauge chart or just big numbers
-    'debounce_rate'    => 250    // milliseconds after key press to send keyup event when filtering
+    'allow_filelist'   => true,          // show/hide the files tab
+    'allow_invalidate' => true,          // give a link to invalidate files
+    'allow_reset'      => true,          // give option to reset the whole cache
+    'allow_realtime'   => true,          // give option to enable/disable real-time updates
+    'refresh_time'     => 5,             // how often the data will refresh, in seconds
+    'size_precision'   => 2,             // Digits after decimal point
+    'size_space'       => false,         // have '1MB' or '1 MB' when showing sizes
+    'charts'           => true,          // show gauge chart or just big numbers
+    'debounce_rate'    => 250,           // milliseconds after key press to send keyup event when filtering
+    'cookie_name'      => 'opcachegui',  // name of cookie
+    'cookie_ttl'       => 365            // days to store cookie
 ];
 
 /*
@@ -36,7 +40,8 @@ if (!extension_loaded('Zend OPcache')) {
     die('The Zend OPcache extension does not appear to be installed');
 }
 
-if (empty(ini_get('opcache.enable'))) {
+$ocEnabled = ini_get('opcache.enable');
+if (empty($ocEnabled)) {
     die('The Zend OPcache extension is installed but not turned on');
 }
 
@@ -53,7 +58,9 @@ class OpCacheService
         'size_precision'   => 2,
         'size_space'       => false,
         'charts'           => true,
-        'debounce_rate'    => 250
+        'debounce_rate'    => 250,
+        'cookie_name'      => 'opcachegui',
+        'cookie_ttl'       => 365
     ];
 
     private function __construct($options = [])
@@ -184,6 +191,7 @@ class OpCacheService
                     'blacklist_miss'     => number_format($status['opcache_statistics']['blacklist_misses']),
                     'num_cached_keys'    => number_format($status['opcache_statistics']['num_cached_keys']),
                     'max_cached_keys'    => number_format($status['opcache_statistics']['max_cached_keys']),
+                    'interned'           => null,
                     'start_time'         => date('Y-m-d H:i:s', $status['opcache_statistics']['start_time']),
                     'last_restart_time'  => ($status['opcache_statistics']['last_restart_time'] == 0
                             ? 'never'
@@ -192,6 +200,15 @@ class OpCacheService
                 ]
             ]
         );
+
+        if (!empty($status['interned_strings_usage'])) {
+            $overview['readable']['interned'] = [
+                'buffer_size' => $this->size($status['interned_strings_usage']['buffer_size']),
+                'strings_used_memory' => $this->size($status['interned_strings_usage']['used_memory']),
+                'strings_free_memory' => $this->size($status['interned_strings_usage']['free_memory']),
+                'number_of_strings' => number_format($status['interned_strings_usage']['number_of_strings'])
+            ];
+        }
 
         $directives = [];
         ksort($config['directives']);
@@ -203,7 +220,7 @@ class OpCacheService
             $config['version'],
             [
                 'php'    => phpversion(),
-                'server' => $_SERVER['SERVER_SOFTWARE'],
+                'server' => empty($_SERVER['SERVER_SOFTWARE']) ? '' : $_SERVER['SERVER_SOFTWARE'],
                 'host'   => (function_exists('gethostname')
                     ? gethostname()
                     : (php_uname('n')
@@ -230,15 +247,15 @@ class OpCacheService
 $opcache = OpCacheService::init($options);
 
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8"/>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>OPcache statistics on <?php echo $opcache->getData('version', 'host'); ?></title>
-    <script src="//cdn.jsdelivr.net/react/15.0.1/react.min.js"></script>
-    <script src="//cdn.jsdelivr.net/react/15.0.1/react-dom.min.js"></script>
-    <script src="//code.jquery.com/jquery-2.2.3.min.js"></script>
+    <script src="//cdn.jsdelivr.net/react/15.4.2/react.min.js"></script>
+    <script src="//cdn.jsdelivr.net/react/15.4.2/react-dom.min.js"></script>
+    <script src="//cdn.jsdelivr.net/jquery/3.1.1/jquery.min.js"></script>
     <style type="text/css">
         body { font-family:sans-serif; font-size:90%; padding: 0; margin: 0 }
         nav { padding-top: 20px; }
@@ -252,7 +269,7 @@ $opcache = OpCacheService::init($options);
         table caption { text-align: left; font-size: 1.5em; }
         table tr { background-color: #99D0DF; border-color: #fff; }
         table th { text-align: left; padding: 6px; background-color: #6ca6ef; color: #fff; border-color: #fff; font-weight: normal; }
-        table td { padding: 4px 6px; line-height: 1.4em; vertical-align: top; border-color: #fff; }
+        table td { padding: 4px 6px; line-height: 1.4em; vertical-align: top; border-color: #fff; overflow: hidden; overflow-wrap: break-word; text-overflow: ellipsis;}
         table tr:nth-child(odd) { background-color: #EFFEFF; }
         table tr:nth-child(even) { background-color: #E0ECEF; }
         #filelist table tr { background-color: #EFFEFF; }
@@ -261,7 +278,7 @@ $opcache = OpCacheService::init($options);
         footer { border-top: 1px solid #ccc; padding: 1em 2em; }
         footer a { padding: 2em; text-decoration: none; opacity: 0.7; }
         footer a:hover { opacity: 1; }
-        canvas { display: block; width: 250px; height: 250px; margin: 0 auto; }
+        canvas { display: block; max-width: 100%; height: auto; margin: 0 auto; }
         #tabs { padding: 2em; }
         #tabs > div { display: none; }
         #tabs > div#overview { display:block; }
@@ -277,8 +294,8 @@ $opcache = OpCacheService::init($options);
         #counts > div > div > p span.large { color: #6ca6ef; font-size: 80pt; margin: 0; padding: 0; text-align: center; }
         #info { margin-right: 280px; }
         #frmFilter { width: 520px; }
-        #moreinfo { padding: 10px; }
-        #moreinfo > p { text-align: left !important; line-height: 180%; }
+        .moreinfo > div { padding: 10px; }
+        .moreinfo > div > p { margin: 0; line-height: 1.75em; }
         .metainfo { font-size: 80%; }
         .hide { display: none; }
         #toggleRealtime.pulse::before {
@@ -364,7 +381,10 @@ $opcache = OpCacheService::init($options);
     </div>
     <div id="files">
         <?php if ($opcache->getOption('allow_filelist')): ?>
-        <p><label>Start typing to filter on script path<br/><input type="text" name="filter" id="frmFilter" /><label></p>
+        <form action="#">
+            <label for="frmFilter">Start typing to filter on script path</label><br>
+            <input type="text" name="filter" id="frmFilter">
+        </form>
         <?php endif; ?>
         <div class="container" id="filelist"></div>
     </div>
@@ -410,7 +430,6 @@ $opcache = OpCacheService::init($options);
         });
         $('#filelist table tbody').trigger('paint');
     };
-
     <?php if ($opcache->getOption('charts')): ?>
     var Gauge = function(el, colour) {
         this.canvas  = $(el).get(0);
@@ -466,6 +485,21 @@ $opcache = OpCacheService::init($options);
 
     $(function(){
         <?php if ($opcache->getOption('allow_realtime')): ?>
+        function setCookie() {
+            var d = new Date();
+            var secure = (window.location.protocol === 'https:' ? ';secure' : '');
+            d.setTime(d.getTime() + (<?php echo ($opcache->getOption('cookie_ttl')); ?> * 86400000));
+            var expires = "expires="+d.toUTCString();
+            document.cookie = "<?php echo ($opcache->getOption('cookie_name')); ?>=true;" + expires + ";path=/" + secure;
+        };
+        function removeCookie() {
+            var secure = (window.location.protocol === 'https:' ? ';secure' : '');
+            document.cookie = "<?php echo ($opcache->getOption('cookie_name')); ?>=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/" + secure;
+        };
+        function getCookie() {
+            var v = document.cookie.match('(^|;) ?<?php echo ($opcache->getOption('cookie_name')); ?>=([^;]*)(;|$)');
+            return v ? v[2] : null;
+        };
         function updateStatus() {
             $('#toggleRealtime').removeClass('pulse');
             $.ajax({
@@ -496,12 +530,18 @@ $opcache = OpCacheService::init($options);
             if (realtime === false) {
                 realtime = setInterval(function(){updateStatus()}, <?php echo (int)$opcache->getOption('refresh_time') * 1000; ?>);
                 $(this).text('Disable real-time update');
+                setCookie();
             } else {
                 clearInterval(realtime);
                 realtime = false;
                 $(this).text('Enable real-time update').removeClass('pulse');
+                removeCookie();
             }
         });
+        if (getCookie() == 'true') {
+            realtime = setInterval(function(){updateStatus()}, <?php echo (int)$opcache->getOption('refresh_time') * 1000; ?>);
+            $('#toggleRealtime').text('Disable real-time update');
+        }
         <?php endif; ?>
         $('nav a[data-for]').click(function(){
             $('#tabs > div').hide();
@@ -519,126 +559,483 @@ $opcache = OpCacheService::init($options);
         $('#frmFilter').bind('keyup', debounce(keyUp, <?php echo $opcache->getOption('debounce_rate'); ?>));
     });
 
-    var MemoryUsage = React.createClass({displayName: "MemoryUsage",
-        getInitialState: function() {
+    var MemoryUsageGraph = React.createClass({
+        getInitialState: function () {
             return {
-                memoryUsageGauge : null
+                memoryUsageGauge: null
             };
         },
-        componentDidMount: function() {
+        componentDidMount: function () {
             if (this.props.chart) {
                 this.state.memoryUsageGauge = new Gauge('#memoryUsageCanvas');
                 this.state.memoryUsageGauge.setValue(this.props.value);
             }
         },
-        componentDidUpdate: function() {
+        componentDidUpdate: function () {
             if (this.state.memoryUsageGauge != null) {
                 this.state.memoryUsageGauge.setValue(this.props.value);
             }
         },
-        render: function() {
+        render: function () {
             if (this.props.chart == true) {
-                return(React.createElement("canvas", {id: "memoryUsageCanvas", width: "250", height: "250", "data-value": this.props.value}));
+                return React.createElement("canvas", { id: "memoryUsageCanvas", width: "250", height: "250", "data-value": this.props.value });
             }
-            return(React.createElement("p", null, React.createElement("span", {className: "large"}, this.props.value), React.createElement("span", null, "%")));
+            return React.createElement(
+                "p",
+                null,
+                React.createElement(
+                    "span",
+                    { className: "large" },
+                    this.props.value
+                ),
+                React.createElement(
+                    "span",
+                    null,
+                    "%"
+                )
+            );
         }
     });
 
-    var HitRate = React.createClass({displayName: "HitRate",
-        getInitialState: function() {
+    var HitRateGraph = React.createClass({
+        getInitialState: function () {
             return {
-                hitRateGauge : null
+                hitRateGauge: null
             };
         },
-        componentDidMount: function() {
+        componentDidMount: function () {
             if (this.props.chart) {
                 this.state.hitRateGauge = new Gauge('#hitRateCanvas');
-                this.state.hitRateGauge.setValue(this.props.value)
+                this.state.hitRateGauge.setValue(this.props.value);
             }
         },
-        componentDidUpdate: function() {
+        componentDidUpdate: function () {
             if (this.state.hitRateGauge != null) {
                 this.state.hitRateGauge.setValue(this.props.value);
             }
         },
-        render: function() {
+        render: function () {
             if (this.props.chart == true) {
-                return(React.createElement("canvas", {id: "hitRateCanvas", width: "250", height: "250", "data-value": this.props.value}));
+                return React.createElement("canvas", { id: "hitRateCanvas", width: "250", height: "250", "data-value": this.props.value });
             }
-            return(React.createElement("p", null, React.createElement("span", {className: "large"}, this.props.value), React.createElement("span", null, "%")));
+            return React.createElement(
+                "p",
+                null,
+                React.createElement(
+                    "span",
+                    { className: "large" },
+                    this.props.value
+                ),
+                React.createElement(
+                    "span",
+                    null,
+                    "%"
+                )
+            );
         }
     });
 
-    var OverviewCounts = React.createClass({displayName: "OverviewCounts",
-        getInitialState: function() {
-            return {
-                data  : opstate.overview,
-                chart : useCharts
-            };
-        },
-        render: function() {
-            return (
-                React.createElement("div", null,
-                    React.createElement("div", null,
-                        React.createElement("h3", null, "memory usage"),
-                        React.createElement("p", null, React.createElement(MemoryUsage, {chart: this.state.chart, value: this.state.data.used_memory_percentage}))
+    var MemoryUsagePanel = React.createClass({
+        render: function () {
+            return React.createElement(
+                "div",
+                { className: "moreinfo" },
+                React.createElement(
+                    "h3",
+                    null,
+                    "memory usage"
+                ),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "total memory:"
+                        ),
+                        " ",
+                        this.props.total
                     ),
-                    React.createElement("div", null,
-                        React.createElement("h3", null, "hit rate"),
-                        React.createElement("p", null, React.createElement(HitRate, {chart: this.state.chart, value: this.state.data.hit_rate_percentage}))
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "used memory:"
+                        ),
+                        " ",
+                        this.props.used
                     ),
-                    React.createElement("div", {id: "moreinfo"},
-                        React.createElement("p", null, React.createElement("b", null, "total memory:"), " ", this.state.data.readable.total_memory),
-                        React.createElement("p", null, React.createElement("b", null, "used memory:"), " ", this.state.data.readable.used_memory),
-                        React.createElement("p", null, React.createElement("b", null, "free memory:"), " ", this.state.data.readable.free_memory),
-                        React.createElement("p", null, React.createElement("b", null, "wasted memory:"), " ", this.state.data.readable.wasted_memory, " (", this.state.data.wasted_percentage, "%)"),
-                        React.createElement("p", null, React.createElement("b", null, "number of cached files:"), " ", this.state.data.readable.num_cached_scripts),
-                        React.createElement("p", null, React.createElement("b", null, "number of hits:"), " ", this.state.data.readable.hits),
-                        React.createElement("p", null, React.createElement("b", null, "number of misses:"), " ", this.state.data.readable.misses),
-                        React.createElement("p", null, React.createElement("b", null, "blacklist misses:"), " ", this.state.data.readable.blacklist_miss),
-                        React.createElement("p", null, React.createElement("b", null, "number of cached keys:"), " ", this.state.data.readable.num_cached_keys),
-                        React.createElement("p", null, React.createElement("b", null, "max cached keys:"), " ", this.state.data.readable.max_cached_keys)
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "free memory:"
+                        ),
+                        " ",
+                        this.props.free
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "wasted memory:"
+                        ),
+                        " ",
+                        this.props.wasted,
+                        " (",
+                        this.props.wastedPercent,
+                        "%)"
                     )
                 )
             );
         }
     });
 
-    var GeneralInfo = React.createClass({displayName: "GeneralInfo",
-        getInitialState: function() {
-            return {
-                version : opstate.version,
-                start : opstate.overview.readable.start_time,
-                reset : opstate.overview.readable.last_restart_time
-            };
-        },
-        render: function() {
-            return (
-                React.createElement("table", null,
-                    React.createElement("thead", null,
-                        React.createElement("tr", null, React.createElement("th", {colSpan: "2"}, "General info"))
+    var StatisticsPanel = React.createClass({
+        render: function () {
+            return React.createElement(
+                "div",
+                { className: "moreinfo" },
+                React.createElement(
+                    "h3",
+                    null,
+                    "opcache statistics"
+                ),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "number of cached files:"
+                        ),
+                        " ",
+                        this.props.num_cached_scripts
                     ),
-                    React.createElement("tbody", null,
-                        React.createElement("tr", null, React.createElement("td", null, "Zend OPcache"), React.createElement("td", null, this.state.version.version)),
-                        React.createElement("tr", null, React.createElement("td", null, "PHP"), React.createElement("td", null, this.state.version.php)),
-                        React.createElement("tr", null, React.createElement("td", null, "Host"), React.createElement("td", null, this.state.version.host)),
-                        React.createElement("tr", null, React.createElement("td", null, "Server Software"), React.createElement("td", null, this.state.version.server)),
-                        React.createElement("tr", null, React.createElement("td", null, "Start time"), React.createElement("td", null, this.state.start)),
-                        React.createElement("tr", null, React.createElement("td", null, "Last reset"), React.createElement("td", null, this.state.reset))
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "number of hits:"
+                        ),
+                        " ",
+                        this.props.hits
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "number of misses:"
+                        ),
+                        " ",
+                        this.props.misses
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "blacklist misses:"
+                        ),
+                        " ",
+                        this.props.blacklist_miss
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "number of cached keys:"
+                        ),
+                        " ",
+                        this.props.num_cached_keys
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "max cached keys:"
+                        ),
+                        " ",
+                        this.props.max_cached_keys
                     )
                 )
             );
         }
     });
 
-    var Directives = React.createClass({displayName: "Directives",
-        getInitialState: function() {
-            return { data : opstate.directives };
+    var InternedStringsPanel = React.createClass({
+        render: function () {
+            return React.createElement(
+                "div",
+                { className: "moreinfo" },
+                React.createElement(
+                    "h3",
+                    null,
+                    "interned strings usage"
+                ),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "buffer size:"
+                        ),
+                        " ",
+                        this.props.buffer_size
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "used memory:"
+                        ),
+                        " ",
+                        this.props.strings_used_memory
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "free memory:"
+                        ),
+                        " ",
+                        this.props.strings_free_memory
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(
+                            "b",
+                            null,
+                            "number of strings:"
+                        ),
+                        " ",
+                        this.props.number_of_strings
+                    )
+                )
+            );
+        }
+    });
+
+    var OverviewCounts = React.createClass({
+        getInitialState: function () {
+            return {
+                data: opstate.overview,
+                chart: useCharts
+            };
         },
-        render: function() {
-            var directiveNodes = this.state.data.map(function(directive) {
-                var map = { 'opcache.':'', '_':' ' };
-                var dShow = directive.k.replace(/opcache\.|_/gi, function(matched){
+        render: function () {
+            var interned = this.state.data.readable.interned != null ? React.createElement(InternedStringsPanel, {
+                buffer_size: this.state.data.readable.interned.buffer_size,
+                strings_used_memory: this.state.data.readable.interned.strings_used_memory,
+                strings_free_memory: this.state.data.readable.interned.strings_free_memory,
+                number_of_strings: this.state.data.readable.interned.number_of_strings
+            }) : '';
+            return React.createElement(
+                "div",
+                null,
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "h3",
+                        null,
+                        "memory"
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(MemoryUsageGraph, { chart: this.state.chart, value: this.state.data.used_memory_percentage })
+                    )
+                ),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "h3",
+                        null,
+                        "hit rate"
+                    ),
+                    React.createElement(
+                        "p",
+                        null,
+                        React.createElement(HitRateGraph, { chart: this.state.chart, value: this.state.data.hit_rate_percentage })
+                    )
+                ),
+                React.createElement(MemoryUsagePanel, {
+                    total: this.state.data.readable.total_memory,
+                    used: this.state.data.readable.used_memory,
+                    free: this.state.data.readable.free_memory,
+                    wasted: this.state.data.readable.wasted_memory,
+                    wastedPercent: this.state.data.wasted_percentage
+                }),
+                React.createElement(StatisticsPanel, {
+                    num_cached_scripts: this.state.data.readable.num_cached_scripts,
+                    hits: this.state.data.readable.hits,
+                    misses: this.state.data.readable.misses,
+                    blacklist_miss: this.state.data.readable.blacklist_miss,
+                    num_cached_keys: this.state.data.readable.num_cached_keys,
+                    max_cached_keys: this.state.data.readable.max_cached_keys
+                }),
+                interned
+            );
+        }
+    });
+
+    var GeneralInfo = React.createClass({
+        getInitialState: function () {
+            return {
+                version: opstate.version,
+                start: opstate.overview.readable.start_time,
+                reset: opstate.overview.readable.last_restart_time
+            };
+        },
+        render: function () {
+            return React.createElement(
+                "table",
+                null,
+                React.createElement(
+                    "thead",
+                    null,
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "th",
+                            { colSpan: "2" },
+                            "General info"
+                        )
+                    )
+                ),
+                React.createElement(
+                    "tbody",
+                    null,
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "Zend OPcache"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.version.version
+                        )
+                    ),
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "PHP"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.version.php
+                        )
+                    ),
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "Host"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.version.host
+                        )
+                    ),
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "Server Software"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.version.server
+                        )
+                    ),
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "Start time"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.start
+                        )
+                    ),
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "td",
+                            null,
+                            "Last reset"
+                        ),
+                        React.createElement(
+                            "td",
+                            null,
+                            this.state.reset
+                        )
+                    )
+                )
+            );
+        }
+    });
+
+    var Directives = React.createClass({
+        getInitialState: function () {
+            return { data: opstate.directives };
+        },
+        render: function () {
+            var directiveNodes = this.state.data.map(function (directive) {
+                var map = { 'opcache.': '', '_': ' ' };
+                var dShow = directive.k.replace(/opcache\.|_/gi, function (matched) {
                     return map[matched];
                 });
                 var vShow;
@@ -649,77 +1046,141 @@ $opcache = OpCacheService::init($options);
                 } else {
                     vShow = directive.v;
                 }
-                return (
-                    React.createElement("tr", {key: directive.k},
-                        React.createElement("td", {title: 'View ' + directive.k + ' manual entry'}, React.createElement("a", {href: 'http://php.net/manual/en/opcache.configuration.php#ini.'
-                        + (directive.k).replace(/_/g,'-'), target: "_blank"}, dShow)),
-                        React.createElement("td", null, vShow)
+                return React.createElement(
+                    "tr",
+                    { key: directive.k },
+                    React.createElement(
+                        "td",
+                        { title: 'View ' + directive.k + ' manual entry' },
+                        React.createElement(
+                            "a",
+                            { href: 'http://php.net/manual/en/opcache.configuration.php#ini.' + directive.k.replace(/_/g, '-'), target: "_blank" },
+                            dShow
+                        )
+                    ),
+                    React.createElement(
+                        "td",
+                        null,
+                        vShow
                     )
                 );
             });
-            return (
-                React.createElement("table", null,
-                    React.createElement("thead", null,
-                        React.createElement("tr", null, React.createElement("th", {colSpan: "2"}, "Directives"))
-                    ),
-                    React.createElement("tbody", null, directiveNodes)
+            return React.createElement(
+                "table",
+                null,
+                React.createElement(
+                    "thead",
+                    null,
+                    React.createElement(
+                        "tr",
+                        null,
+                        React.createElement(
+                            "th",
+                            { colSpan: "2" },
+                            "Directives"
+                        )
+                    )
+                ),
+                React.createElement(
+                    "tbody",
+                    null,
+                    directiveNodes
                 )
             );
         }
     });
 
-    var Files = React.createClass({displayName: "Files",
-        getInitialState: function() {
+    var Files = React.createClass({
+        getInitialState: function () {
             return {
-                data : opstate.files,
+                data: opstate.files,
                 showing: null,
                 allowFiles: allowFiles
             };
         },
-        handleInvalidate: function(e) {
+        handleInvalidate: function (e) {
             e.preventDefault();
             if (realtime) {
-                $.get('#', { invalidate: e.currentTarget.getAttribute('data-file') }, function(data) {
+                $.get('#', { invalidate: e.currentTarget.getAttribute('data-file') }, function (data) {
                     console.log('success: ' + data.success);
                 }, 'json');
             } else {
                 window.location.href = e.currentTarget.href;
             }
         },
-        render: function() {
+        render: function () {
             if (this.state.allowFiles) {
-                var fileNodes = this.state.data.map(function(file, i) {
+                var fileNodes = this.state.data.map(function (file, i) {
                     var invalidate, invalidated;
                     if (file.timestamp == 0) {
-                        invalidated = React.createElement("span", null, React.createElement("i", {className: "invalid metainfo"}, " - has been invalidated"));
+                        invalidated = React.createElement(
+                            "span",
+                            null,
+                            React.createElement(
+                                "i",
+                                { className: "invalid metainfo" },
+                                " - has been invalidated"
+                            )
+                        );
                     }
                     if (canInvalidate) {
-                        invalidate = React.createElement("span", null, ", ", React.createElement("a", {className: "metainfo", href: '?invalidate='
-                        + file.full_path, "data-file": file.full_path, onClick: this.handleInvalidate}, "force file invalidation"));
+                        invalidate = React.createElement(
+                            "span",
+                            null,
+                            ", ",
+                            React.createElement(
+                                "a",
+                                { className: "metainfo", href: '?invalidate=' + file.full_path, "data-file": file.full_path, onClick: this.handleInvalidate },
+                                "force file invalidation"
+                            )
+                        );
                     }
-                    return (
-                        React.createElement("tr", {key: file.full_path, "data-path": file.full_path.toLowerCase(), className: i%2?'alternate':''},
-                            React.createElement("td", null,
-                                React.createElement("div", null,
-                                    React.createElement("span", {className: "pathname"}, file.full_path), React.createElement("br", null),
-                                    React.createElement(FilesMeta, {data: [file.readable.hits, file.readable.memory_consumption, file.last_used]}),
-                                    invalidate,
-                                    invalidated
-                                )
+                    return React.createElement(
+                        "tr",
+                        { key: file.full_path, "data-path": file.full_path.toLowerCase(), className: i % 2 ? 'alternate' : '' },
+                        React.createElement(
+                            "td",
+                            null,
+                            React.createElement(
+                                "div",
+                                null,
+                                React.createElement(
+                                    "span",
+                                    { className: "pathname" },
+                                    file.full_path
+                                ),
+                                React.createElement("br", null),
+                                React.createElement(FilesMeta, { data: [file.readable.hits, file.readable.memory_consumption, file.last_used] }),
+                                invalidate,
+                                invalidated
                             )
                         )
                     );
                 }.bind(this));
-                return (
-                    React.createElement("div", null,
-                        React.createElement(FilesListed, {showing: this.state.showing}),
-                        React.createElement("table", null,
-                            React.createElement("thead", null,
-                                React.createElement("tr", null,
-                                    React.createElement("th", null, "Script")
+                return React.createElement(
+                    "div",
+                    null,
+                    React.createElement(FilesListed, { showing: this.state.showing }),
+                    React.createElement(
+                        "table",
+                        null,
+                        React.createElement(
+                            "thead",
+                            null,
+                            React.createElement(
+                                "tr",
+                                null,
+                                React.createElement(
+                                    "th",
+                                    null,
+                                    "Script"
                                 )
-                            ),
-                            React.createElement("tbody", null, fileNodes)
+                            )
+                        ),
+                        React.createElement(
+                            "tbody",
+                            null,
+                            fileNodes
                         )
                     )
                 );
@@ -729,31 +1190,64 @@ $opcache = OpCacheService::init($options);
         }
     });
 
-    var FilesMeta = React.createClass({displayName: "FilesMeta",
-        render: function() {
-            return (
-                React.createElement("span", {className: "metainfo"},
-                    React.createElement("b", null, "hits: "), React.createElement("span", null, this.props.data[0], ", "),
-                    React.createElement("b", null, "memory: "), React.createElement("span", null, this.props.data[1], ", "),
-                    React.createElement("b", null, "last used: "), React.createElement("span", null, this.props.data[2])
+    var FilesMeta = React.createClass({
+        render: function () {
+            return React.createElement(
+                "span",
+                { className: "metainfo" },
+                React.createElement(
+                    "b",
+                    null,
+                    "hits: "
+                ),
+                React.createElement(
+                    "span",
+                    null,
+                    this.props.data[0],
+                    ", "
+                ),
+                React.createElement(
+                    "b",
+                    null,
+                    "memory: "
+                ),
+                React.createElement(
+                    "span",
+                    null,
+                    this.props.data[1],
+                    ", "
+                ),
+                React.createElement(
+                    "b",
+                    null,
+                    "last used: "
+                ),
+                React.createElement(
+                    "span",
+                    null,
+                    this.props.data[2]
                 )
             );
         }
     });
 
-    var FilesListed = React.createClass({displayName: "FilesListed",
-        getInitialState: function() {
+    var FilesListed = React.createClass({
+        getInitialState: function () {
             return {
-                formatted : opstate.overview.readable.num_cached_scripts,
-                total     : opstate.overview.num_cached_scripts
+                formatted: opstate.overview.readable.num_cached_scripts,
+                total: opstate.overview.num_cached_scripts
             };
         },
-        render: function() {
+        render: function () {
             var display = this.state.formatted + ' file' + (this.state.total == 1 ? '' : 's') + ' cached';
             if (this.props.showing !== null && this.props.showing != this.state.total) {
                 display += ', ' + this.props.showing + ' showing due to filter';
             }
-            return (React.createElement("h3", null, display));
+            return React.createElement(
+                "h3",
+                null,
+                display
+            );
         }
     });
 
