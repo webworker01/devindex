@@ -9,7 +9,7 @@
  *  adminer  - git clone https://github.com/vrana/adminer/
  *             git submodule update --init
  * 
- * @version 0.0.1
+ * @version 0.0.2
  * @author https://github.com/webworker01
  * @link https://github.com/webworker01/devindex
  * @since PHP 7.0.25
