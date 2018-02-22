@@ -42,12 +42,14 @@ $dirs = [];
 $tools = [];
 
 while(false !== ($filename = readdir($dir_open))){
-    if($filename != "." && $filename != ".."){
-        if (is_dir($filename) && !array_key_exists($filename, $special)) {
-            $dirs[] = $filename;
-        } elseif (!array_key_exists($filename, $special) && !in_array($filename, $ignorefiles)) {
-            $files[] = $filename;
-        } elseif (array_key_exists($filename, $special)) {
+    if( $filename != "." && $filename != ".." && !in_array($filename, $ignorefiles) ){
+        if ( !array_key_exists($filename, $special) ) {
+            if ( is_dir($filename) ) {
+                $dirs[] = $filename;
+            } else {
+                $files[] = $filename;
+            }
+        } else {
             $tools[] = $filename;
         }
     }
