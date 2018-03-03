@@ -34,6 +34,7 @@ $ignorefiles = [
     'index.php',
     '.gitignore',
     'composer.phar',
+    '.git',
 ];
 
 $dir_open = opendir('.');
